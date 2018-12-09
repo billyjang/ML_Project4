@@ -8,6 +8,5 @@ from numpy import genfromtxt
 
 
 if __name__ == "__main__":
-    test_data = genfromtxt('data_kaggle\posts_test.txt', delimiter=',')
-
-    pass
+    test_data = genfromtxt('\data_kaggle\posts_test.txt', delimiter=',', skip_header=1)
+    print(test_data.shape)
