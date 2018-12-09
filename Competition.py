@@ -17,6 +17,12 @@ from sklearn.model_selection import GridSearchCV
 # https://stackoverflow.com/questions/3518778/how-do-i-read-csv-data-into-a-record-array-in-numpy
 from numpy import genfromtxt
 
+def RMSE(true_values, predictions=None, lat_preds=None, lon_preds=None):
+    sum = 0
+    n = len(true_values)
+    for index in range(0, n):
+        sum += (true_values[0] - predictions[0]) ** 2 + (true_values[1] - predictions[1]) ** 2)
+    return sum / (2 * n)
 
 if __name__ == "__main__":
     test_data = genfromtxt('data_kaggle\posts_test.txt', delimiter=',', skip_header=1)
