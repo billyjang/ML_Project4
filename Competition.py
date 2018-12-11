@@ -10,7 +10,6 @@ from sklearn.metrics import recall_score
 from sklearn.metrics import f1_score
 from sklearn.metrics import mean_squared_error
 from sklearn.preprocessing import MinMaxScaler
-from sklearn.svm import SVC
 from sklearn.svm import SVR
 from math import sqrt
 import datetime
@@ -18,6 +17,68 @@ import datetime
 from sklearn.model_selection import GridSearchCV
 # https://stackoverflow.com/questions/3518778/how-do-i-read-csv-data-into-a-record-array-in-numpy
 from numpy import genfromtxt
+from bisect import bisect_left
+
+
+def binary_search(a, x, lo=0, hi=None):  # can't use a to specify default for hi
+    hi = hi if hi is not None else len(a)  # hi defaults to len(a)
+    pos = bisect_left(a, x, lo, hi)  # find insertion position
+    return pos if pos != hi and a[pos] == x else -1  # don't walk off the end
+
+
+def generate_average_location(train_data, test_data, graph, flat_graph):
+    to_return = []
+    # pointer = 0
+
+    edge_pointer = 0
+    flat_train = train_data[:, 0].flatten()
+    # print("flat_train: ", flat_train)
+
+    for datum in test_data:
+        print("Currently on data id: ", datum[0])
+        sum_latitude = 0
+        sum_longitude = 0
+        n = 0
+        start_index = np.searchsorted(flat_graph, datum[0], side='left')
+        end_index = np.searchsorted(flat_graph, datum[0], side='right')
+
+        for index in range(start_index, end_index):
+            if graph[index][0] == datum[0]:
+                train_index = np.searchsorted(flat_train, graph[index][1], side='left')
+                """
+                print("-------------------------------")
+                print("Test Data index: ", datum[0])
+                print("Graph index 0: ", graph[index][0])
+                print("Train Data index: ", train_index)
+                print("Graph index 1: ", graph[index][1])
+                print("-------------------------------")
+                """
+                if train_index < len(train_data) and train_data[train_index][0] == graph[index][1]:
+                    # print(" adding new data")
+                    sum_latitude += train_data[train_index][4]
+                    sum_longitude += train_data[train_index][5]
+                    n += 1
+        avg_latitude = 0
+        avg_longitude = 0
+        if n != 0:
+            # print("N is not 0")
+            avg_latitude = sum_latitude / n
+            avg_longitude = sum_longitude / n
+        to_return.append(np.append(datum, [avg_latitude, avg_longitude]))
+    return np.array(to_return)
+    pass
+
+
+def remove_nulls(data):
+    delete_array = []
+    to_return = data
+    for index in range(0, len(data)):
+        if data[index][4] == 0 and data[index][5] == 0:
+            delete_array.append(index)
+    for delete_index in reversed(delete_array):
+        to_return = np.delete(to_return, delete_index, 0)
+    return to_return
+    pass
 
 
 def RMSE(true_values, predictions=None, lat_preds=None, lon_preds=None):
@@ -33,27 +94,52 @@ def RMSE(true_values, predictions=None, lat_preds=None, lon_preds=None):
 
 
 if __name__ == "__main__":
-    print("Start time: ", datetime.datetime.now())
+    start_time = datetime.datetime.now()
+    print("Start time: ", start_time)
     test_data = genfromtxt('data_kaggle\posts_test.txt', delimiter=',', skip_header=1)
     train_data = genfromtxt('data_kaggle\posts_train.txt', delimiter=',', skip_header=1)
     graph_data = genfromtxt('data_kaggle\graph.txt', skip_header=1)
     # print("Test Data: ", test_data)
     # print("Train Data: ", train_data)
     # print("Graph Data: ", graph_data)
+    train_data = remove_nulls(train_data)
 
+    zero_test_flag = False
+    zero_eliminated_test_array = np.copy(train_data)
+    print("Zero Test: ")
+    for test_element in zero_eliminated_test_array:
+        if test_element[4] == 0 and test_element[5] == 0:
+            print("Warning, null island detected")
+            zero_test_flag = True
+    if not zero_test_flag:
+        print("All clear, null island removed!")
     # """
     y_tr = train_data[25000:, [4, 5]]
     y_lat_tr = train_data[25000:, 4]
     y_lon_tr = train_data[25000:, 5]
     # print("Training Y: ", y_tr.shape)
-    X_tr = train_data[25000:, 1:4]
-    X_lon_tr = train_data[25000:, [1, 2, 3, 4]]
-    X_lat_tr = train_data[25000:, [1, 2, 3, 5]]
+    X_tr = train_data[25000:, :]
+    # X_lon_tr = train_data[25000:, [1, 2, 3, 4]]
+    # X_lat_tr = train_data[25000:, [1, 2, 3, 5]]
     # print("Training X: ", X_tr.shape)
 
-    X_te = train_data[:25000, 1:4]
-    X_lon_te = train_data[:25000, [1, 2, 3, 4]]
-    X_lat_te = train_data[:25000, [1, 2, 3, 5]]
+    X_te = train_data[:25000, :]
+    # X_lon_te = train_data[:25000, [1, 2, 3, 4]]
+    # X_lat_te = train_data[:25000, [1, 2, 3, 5]]
+
+    flat_graph = graph_data[:, 0].flatten()
+    X_tr = generate_average_location(X_tr, X_tr, graph_data, flat_graph)
+    print("New Training Data: ")
+    print(X_tr)
+    X_te = generate_average_location(X_tr, X_te, graph_data, flat_graph)
+    print("New Testing Data: ")
+    print(X_te)
+
+    scaler = MinMaxScaler()
+    scaler.fit(X_tr)
+    scaled_X_tr = scaler.transform(X_tr)
+    scaler.fit(X_te)
+    scaled_X_te = scaler.transform(X_te)
 
     y_te = train_data[:25000, [4, 5]]
     y_lat_te = train_data[:25000, 4]
@@ -75,26 +161,49 @@ if __name__ == "__main__":
     """
 
     params = [
-        {'C': [1, 10, 100, 1000], 'gamma': [1, 0.1, 0.01, 0.001], 'kernel': ['rbf']},
-        {'C': [1, 10, 100, 1000], 'coef0': [0.1, 1, 10, 100], 'kernel': ['sigmoid']}
+        # {'C': [1, 10, 100], 'gamma': [1, 0.1], 'kernel': ['rbf', 'poly', 'sigmoid']}
+        {'C': [1000], 'kernel':['rbf'], 'gamma': [1]}
     ]
 
-    clf = GridSearchCV(SVR(), param_grid=params, cv=5)
+    clf = GridSearchCV(SVR(), param_grid=params, cv=5, n_jobs=-1)
     # clf = SVR(gamma='auto', kernel='rbf')
-    # clf.fit(X_tr, y_tr)
-    clf.fit(X_lat_tr, y_lat_tr)
-    lat_preds = clf.predict(X_lat_te)
 
-    clf.fit(X_lon_tr, y_lon_tr)
-    lon_preds = clf.predict(X_lon_te)
+    ###################
+    # Testing by Hand #
+    ###################
+    print("Starting regression at time: ", datetime.datetime.now())
+    """
+    svr_kernel = 'rbf'
+    svr_gamma = 'scale'
+    clf = SVR(gamma=svr_gamma, kernel=svr_kernel, C=10)
+    print("SVR with " + svr_kernel + " kernel and " + svr_gamma + " gamma")
+    """
+    # """
+    # clf.fit(X_tr, y_tr)
+    clf.fit(scaled_X_tr, y_lat_tr)
+    lat_preds = clf.predict(scaled_X_te)
+    print("Latitude best regressor: ")
+    print(clf.cv_results_)
+
+    clf.fit(scaled_X_tr, y_lon_tr)
+    lon_preds = clf.predict(scaled_X_te)
+    print("Longitude best regressor: ")
+    print(clf.cv_results_)
 
     predictions = np.column_stack((lat_preds, lon_preds))
     error = RMSE(y_te, predictions)
 
+    ##############
+    # Gridsearch #
+    ##############
+
     print("RMSE Error: ", error)
 
     mseError = sqrt(mean_squared_error(y_te, predictions))
-    print("Scikit Lean Error: ", mseError)
+    print("Scikit Learn Error: ", mseError)
+    # """
+    end_time = datetime.datetime.now()
+    print("End time: ", end_time)
+    print("Total Time Difference: ", end_time - start_time)
 
-    print("End time: ", datetime.datetime.now())
     pass
