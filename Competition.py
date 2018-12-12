@@ -13,6 +13,7 @@ from sklearn.preprocessing import MinMaxScaler
 from sklearn.svm import SVR
 from math import sqrt
 import datetime
+import sys
 
 from sklearn.model_selection import GridSearchCV
 # https://stackoverflow.com/questions/3518778/how-do-i-read-csv-data-into-a-record-array-in-numpy
@@ -98,6 +99,30 @@ def RMSE(true_values, predictions=None, lat_preds=None, lon_preds=None):
 
 if __name__ == "__main__":
     start_time = datetime.datetime.now()
+
+    ####################
+    # System Arguments #
+    ####################
+
+    set_mode = ""
+    print("System Arguments: ")
+    print(sys.argv)
+    # print(sys.argv[1])
+    # print(sys.argv[1] == "c")
+    if len(sys.argv) == 1:
+        set_mode = "debug"
+    elif sys.argv[1] == "debug" or sys.argv[0] == "d":
+        set_mode = "debug"
+    elif sys.argv[1] == "competition" or sys.argv[0] == "c":
+        set_mode = "competition"
+    else:
+        set_mode = "debug"
+        print("Incorrect Arguments. Will proceed in debug mode.")
+
+    #####################################################################
+    # Read in data from Training and Testing Sets, as well as the Graph #
+    #####################################################################
+
     print("Start time: ", start_time)
     test_data = genfromtxt('data_kaggle\posts_test.txt', delimiter=',', skip_header=1)
     train_data = genfromtxt('data_kaggle\posts_train.txt', delimiter=',', skip_header=1)
@@ -105,6 +130,11 @@ if __name__ == "__main__":
     # print("Test Data: ", test_data)
     # print("Train Data: ", train_data)
     # print("Graph Data: ", graph_data)
+
+    #######################################
+    # Remove Null Island and Test Removal #
+    #######################################
+
     train_data = remove_nulls(train_data)
 
     zero_test_flag = False
@@ -116,27 +146,41 @@ if __name__ == "__main__":
             zero_test_flag = True
     if not zero_test_flag:
         print("All clear, null island removed!")
+
+    ############################################
+    # Set X_tr, X_te, y_tr, y_te, and variants #
+    ############################################
+
     # """
-    y_tr = train_data[25000:, [4, 5]]
-    y_lat_tr = train_data[25000:, 4]
-    y_lon_tr = train_data[25000:, 5]
-    # print("Training Y: ", y_tr.shape)
-    X_tr = train_data[25000:, :]
-    # X_lon_tr = train_data[25000:, [1, 2, 3, 4]]
-    # X_lat_tr = train_data[25000:, [1, 2, 3, 5]]
-    # print("Training X: ", X_tr.shape)
+    # Setting preliminary y_tr and variants
+    if set_mode == "debug":
+        y_tr = train_data[25000:, [4, 5]]
+        y_lat_tr = train_data[25000:, 4]
+        y_lon_tr = train_data[25000:, 5]
+    else:
+        y_tr = train_data[:, [4, 5]]
+        y_lat_tr = train_data[:, 4]
+        y_lon_tr = train_data[:, 5]
 
-    X_te = train_data[:25000, :]
-    # X_lon_te = train_data[:25000, [1, 2, 3, 4]]
-    # X_lat_te = train_data[:25000, [1, 2, 3, 5]]
+    # Setting preliminary X_tr and X_te
+    if set_mode == "debug":
+        X_tr = train_data[25000:, :]
+        X_te = train_data[:25000, :]
+    else:
+        X_tr = train_data
+        X_te = test_data
 
+    # Generate new features
     flat_graph = graph_data[:, 0].flatten()
     X_tr = generate_average_location(X_tr, X_tr, graph_data, flat_graph)
     X_te = generate_average_location(X_tr, X_te, graph_data, flat_graph)
     X_tr = X_tr[:, [1, 2, 3, 7, 8]]
     print("New Training Data: ")
     print(X_tr)
-    X_te = X_te[:, [1, 2, 3, 7, 8]]
+    if set_mode == "debug":
+        X_te = X_te[:, [1, 2, 3, 7, 8]]
+    else:
+        X_te = X_te[:, [1, 2, 3, 5, 6]]
     print("New Testing Data: ")
     print(X_te)
 
@@ -158,13 +202,15 @@ if __name__ == "__main__":
     y_te_lon_friends = []
     y_te_lon_nofriends = []
 
-    y_te = train_data[:25000, [4, 5]]
+    # We only have y_te if we are debugging
+    if set_mode == "debug":
+        y_te = train_data[:25000, [4, 5]]
 
     for index in range(0, len(X_tr)):
         row = X_tr[index]
         y_row = y_tr[index]
         if row[3] == 0 and row[4] == 0:
-            X_tr_nofriends.append(row)
+            X_tr_nofriends.append(row[:3])
             y_tr_lat_nofriends.append(y_row[0])
             y_tr_lon_nofriends.append(y_row[1])
         else:
@@ -173,17 +219,20 @@ if __name__ == "__main__":
             y_tr_lon_friends.append(y_row[1])
     for index in range(0, len(X_te)):
         row = X_te[index]
-        y_row = y_te[index]
+        if set_mode == "debug":
+            y_row = y_te[index]
         # print("X_te row: ", row)
         if row[3] == 0 and row[4] == 0:
-            X_te_nofriends.append(row)
-            y_te_lat_nofriends.append(y_row[0])
-            y_te_lon_nofriends.append(y_row[1])
+            X_te_nofriends.append(row[:3])
+            if set_mode == "debug":
+                y_te_lat_nofriends.append(y_row[0])
+                y_te_lon_nofriends.append(y_row[1])
         else:
             # print("We have friends!")
             X_te_friends.append(row)
-            y_te_lat_friends.append(y_row[0])
-            y_te_lon_friends.append(y_row[1])
+            if set_mode == "debug":
+                y_te_lat_friends.append(y_row[0])
+                y_te_lon_friends.append(y_row[1])
 
     X_tr_friends = np.array(X_tr_friends)
     X_tr_nofriends = np.array(X_tr_nofriends)
@@ -195,10 +244,11 @@ if __name__ == "__main__":
     y_tr_lon_friends = np.array(y_tr_lon_friends)
     y_tr_lon_nofriends = np.array(y_tr_lon_nofriends)
 
-    y_te_lat_friends = np.array(y_te_lat_friends)
-    y_te_lat_nofriends = np.array(y_te_lat_nofriends)
-    y_te_lon_friends = np.array(y_te_lon_friends)
-    y_te_lon_nofriends = np.array(y_te_lon_nofriends)
+    if set_mode == "debug":
+        y_te_lat_friends = np.array(y_te_lat_friends)
+        y_te_lat_nofriends = np.array(y_te_lat_nofriends)
+        y_te_lon_friends = np.array(y_te_lon_friends)
+        y_te_lon_nofriends = np.array(y_te_lon_nofriends)
     print("There are " + str(len(X_tr_friends)) + " training points with friends")
     print("There are " + str(len(X_tr_nofriends)) + " training points with no friends")
     print("There are " + str(len(X_te_friends)) + " testing points with friends")
@@ -273,27 +323,43 @@ if __name__ == "__main__":
     """
 
     clf.fit(scaled_X_tr_friends, y_tr_lat_friends)
-    lat_preds = clf.predict(scaled_X_te_friends)
-    print("Latitude best regressor: ")
+    lat_preds_friends = clf.predict(scaled_X_te_friends)
+    print("Latitude Friends best regressor: ")
     print(clf.cv_results_)
 
     clf.fit(scaled_X_tr_friends, y_tr_lon_friends)
-    lon_preds = clf.predict(scaled_X_te_friends)
-    print("Longitude best regressor: ")
+    lon_preds_friends = clf.predict(scaled_X_te_friends)
+    print("Longitude Friends best regressor: ")
     print(clf.cv_results_)
+
+    clf.fit(scaled_X_tr_nofriends, y_tr_lat_nofriends)
+    lat_preds_nofriends = clf.predict(scaled_X_te_nofriends)
+    print("Latitude No Friends best regressor: ")
+    print(clf.cv_results_)
+
+    clf.fit(scaled_X_tr_nofriends, y_tr_lon_nofriends)
+    lon_preds_nofriends = clf.predict(scaled_X_te_nofriends)
+    print("Longitude No Friends best regressor: ")
+    print(clf.cv_results_)
+
+    lat_preds = np.concatenate((lat_preds_friends, lat_preds_nofriends), axis=0)
+    lon_preds = np.concatenate((lon_preds_friends, lon_preds_nofriends), axis=0)
     # """
     predictions = np.column_stack((lat_preds, lon_preds))
-    y_te_friends = np.column_stack((y_te_lat_friends, y_te_lon_friends))
-    error = RMSE(y_te_friends, predictions)
+    if set_mode == "debug":
+        y_te_friends = np.column_stack((y_te_lat_friends, y_te_lon_friends))
+        y_te_nofriends = np.column_stack((y_te_lat_nofriends, y_te_lon_nofriends))
+        y_te_concat = np.concatenate((y_te_friends, y_te_nofriends), axis=0)
 
-    ##############
-    # Gridsearch #
-    ##############
+        error = RMSE(y_te_concat, predictions)
+        print("RMSE Error: ", error)
 
-    print("RMSE Error: ", error)
-
-    mseError = sqrt(mean_squared_error(y_te_friends, predictions))
-    print("Scikit Learn Error: ", mseError)
+        mseError = sqrt(mean_squared_error(y_te_concat, predictions))
+        print("Scikit Learn Error: ", mseError)
+    else:
+        test_ids = test_data[:, 0]
+        to_save = np.column_stack((test_ids, predictions))
+        np.savetxt("Test2.txt", to_save, delimiter=",", header="Id,Lat,Lon", fmt='%1.3f')
     # """
     end_time = datetime.datetime.now()
     print("End time: ", end_time)
