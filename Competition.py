@@ -127,6 +127,7 @@ if __name__ == "__main__":
     test_data = genfromtxt('data_kaggle\posts_test.txt', delimiter=',', skip_header=1)
     train_data = genfromtxt('data_kaggle\posts_train.txt', delimiter=',', skip_header=1)
     graph_data = genfromtxt('data_kaggle\graph.txt', skip_header=1)
+    train_data_with_friends = genfromtxt('train_data_with_friends.txt', delimiter=',', skip_header=1)
     # print("Test Data: ", test_data)
     # print("Train Data: ", train_data)
     # print("Graph Data: ", graph_data)
@@ -136,7 +137,7 @@ if __name__ == "__main__":
     #######################################
 
     train_data = remove_nulls(train_data)
-
+    train_data_with_friends = remove_nulls(train_data_with_friends)
     zero_test_flag = False
     zero_eliminated_test_array = np.copy(train_data)
     print("Zero Test: ")
@@ -153,10 +154,12 @@ if __name__ == "__main__":
 
     # """
     # Setting preliminary y_tr and variants
+    debug_left_limit = 1000
+    debug_right_limit = 40000
     if set_mode == "debug":
-        y_tr = train_data[25000:, [4, 5]]
-        y_lat_tr = train_data[25000:, 4]
-        y_lon_tr = train_data[25000:, 5]
+        y_tr = train_data[debug_left_limit:debug_right_limit, [4, 5]]
+        y_lat_tr = train_data[debug_left_limit:debug_right_limit, 4]
+        y_lon_tr = train_data[debug_left_limit:debug_right_limit, 5]
     else:
         y_tr = train_data[:, [4, 5]]
         y_lat_tr = train_data[:, 4]
@@ -164,8 +167,8 @@ if __name__ == "__main__":
 
     # Setting preliminary X_tr and X_te
     if set_mode == "debug":
-        X_tr = train_data[25000:, :]
-        X_te = train_data[:25000, :]
+        X_tr = train_data[debug_left_limit:debug_right_limit, :]
+        X_te = train_data[:debug_left_limit, :]
     else:
         X_tr = train_data
         X_te = test_data
@@ -204,7 +207,7 @@ if __name__ == "__main__":
 
     # We only have y_te if we are debugging
     if set_mode == "debug":
-        y_te = train_data[:25000, [4, 5]]
+        y_te = train_data[:debug_left_limit, [4, 5]]
 
     for index in range(0, len(X_tr)):
         row = X_tr[index]
@@ -234,6 +237,39 @@ if __name__ == "__main__":
                 y_te_lat_friends.append(y_row[0])
                 y_te_lon_friends.append(y_row[1])
 
+    #############
+    # New stuff #
+    #############
+
+    X_tr_c = np.array(train_data_with_friends)
+    X_tr_c_friends = []
+    X_tr_c_nofriends = []
+    y_tr_c_lat_friends = []
+    y_tr_c_lat_nofriends = []
+    y_tr_c_lon_friends = []
+    y_tr_c_lon_nofriends = []
+    print("Length of y_tr: ", len(y_tr))
+    print("Length of X_tr_c: ", len(X_tr_c))
+    if set_mode == "competition":
+        X_tr_c = X_tr_c[:, [1, 2, 3, 7, 8]]
+        for index in range(0, len(X_tr_c)):
+            row = X_tr_c[index]
+            y_row = y_tr[index]
+            if row[3] == 0 and row[4] == 0:
+                X_tr_c_nofriends.append(row[:3])
+                y_tr_c_lat_nofriends.append(y_row[0])
+                y_tr_c_lon_nofriends.append(y_row[1])
+            else:
+                X_tr_c_friends.append(row)
+                y_tr_c_lat_friends.append(y_row[0])
+                y_tr_c_lon_friends.append(y_row[1])
+    X_tr_c_friends = np.array(X_tr_c_friends)
+    X_tr_c_nofriends = np.array(X_tr_c_nofriends)
+    y_tr_c_lat_friends = np.array(y_tr_c_lat_friends)
+    y_tr_c_lat_nofriends = np.array(y_tr_c_lat_nofriends)
+    y_tr_c_lon_friends = np.array(y_tr_c_lon_friends)
+    y_tr_c_lon_nofriends = np.array(y_tr_c_lon_nofriends)
+
     X_tr_friends = np.array(X_tr_friends)
     X_tr_nofriends = np.array(X_tr_nofriends)
     X_te_friends = np.array(X_te_friends)
@@ -251,6 +287,9 @@ if __name__ == "__main__":
         y_te_lon_nofriends = np.array(y_te_lon_nofriends)
     print("There are " + str(len(X_tr_friends)) + " training points with friends")
     print("There are " + str(len(X_tr_nofriends)) + " training points with no friends")
+    if set_mode == "competition":
+        print("There are " + str(len(X_tr_c_friends)) + " C training points with friends")
+        print("There are " + str(len(X_tr_c_nofriends)) + " C training points with no friends")
     print("There are " + str(len(X_te_friends)) + " testing points with friends")
     print("There are " + str(len(X_te_nofriends)) + " testing points with no friends")
 
@@ -272,6 +311,13 @@ if __name__ == "__main__":
     scaler.fit(X_tr_nofriends)
     scaled_X_te_nofriends = scaler.transform(X_te_nofriends)
 
+    scaled_X_tr_c_friends = []
+    scaled_X_tr_c_nofriends = []
+    if set_mode == "competition":
+        scaler.fit(X_tr_c_friends)
+        scaled_X_tr_c_friends = scaler.transform(X_tr_c_friends)
+        scaler.fit(X_tr_c_nofriends)
+        scaled_X_tr_c_nofriends = scaler.transform(X_tr_c_nofriends)
     # y_te = train_data[:25000, [4, 5]]
     # y_lat_te = train_data[:25000, 4]
     # y_lon_te = train_data[:25000, 5]
@@ -321,27 +367,46 @@ if __name__ == "__main__":
     print("Longitude best regressor: ")
     print(clf.cv_results_)
     """
+    if set_mode == "debug":
+        clf.fit(scaled_X_tr_friends, y_tr_lat_friends)
+        lat_preds_friends = clf.predict(scaled_X_te_friends)
+        print("Latitude Friends best regressor: ")
+        print(clf.cv_results_)
 
-    clf.fit(scaled_X_tr_friends, y_tr_lat_friends)
-    lat_preds_friends = clf.predict(scaled_X_te_friends)
-    print("Latitude Friends best regressor: ")
-    print(clf.cv_results_)
+        clf.fit(scaled_X_tr_friends, y_tr_lon_friends)
+        lon_preds_friends = clf.predict(scaled_X_te_friends)
+        print("Longitude Friends best regressor: ")
+        print(clf.cv_results_)
 
-    clf.fit(scaled_X_tr_friends, y_tr_lon_friends)
-    lon_preds_friends = clf.predict(scaled_X_te_friends)
-    print("Longitude Friends best regressor: ")
-    print(clf.cv_results_)
+        clf.fit(scaled_X_tr_nofriends, y_tr_lat_nofriends)
+        lat_preds_nofriends = clf.predict(scaled_X_te_nofriends)
+        print("Latitude No Friends best regressor: ")
+        print(clf.cv_results_)
 
-    clf.fit(scaled_X_tr_nofriends, y_tr_lat_nofriends)
-    lat_preds_nofriends = clf.predict(scaled_X_te_nofriends)
-    print("Latitude No Friends best regressor: ")
-    print(clf.cv_results_)
+        clf.fit(scaled_X_tr_nofriends, y_tr_lon_nofriends)
+        lon_preds_nofriends = clf.predict(scaled_X_te_nofriends)
+        print("Longitude No Friends best regressor: ")
+        print(clf.cv_results_)
+    else:
+        clf.fit(scaled_X_tr_c_friends, y_tr_lat_friends)
+        lat_preds_friends = clf.predict(scaled_X_te_friends)
+        print("Latitude Friends best regressor: ")
+        print(clf.cv_results_)
 
-    clf.fit(scaled_X_tr_nofriends, y_tr_lon_nofriends)
-    lon_preds_nofriends = clf.predict(scaled_X_te_nofriends)
-    print("Longitude No Friends best regressor: ")
-    print(clf.cv_results_)
+        clf.fit(scaled_X_tr_c_friends, y_tr_lon_friends)
+        lon_preds_friends = clf.predict(scaled_X_te_friends)
+        print("Longitude Friends best regressor: ")
+        print(clf.cv_results_)
 
+        clf.fit(scaled_X_tr_c_nofriends, y_tr_lat_nofriends)
+        lat_preds_nofriends = clf.predict(scaled_X_te_nofriends)
+        print("Latitude No Friends best regressor: ")
+        print(clf.cv_results_)
+
+        clf.fit(scaled_X_tr_c_nofriends, y_tr_lon_nofriends)
+        lon_preds_nofriends = clf.predict(scaled_X_te_nofriends)
+        print("Longitude No Friends best regressor: ")
+        print(clf.cv_results_)
     lat_preds = np.concatenate((lat_preds_friends, lat_preds_nofriends), axis=0)
     lon_preds = np.concatenate((lon_preds_friends, lon_preds_nofriends), axis=0)
     # """
@@ -359,7 +424,7 @@ if __name__ == "__main__":
     else:
         test_ids = test_data[:, 0]
         to_save = np.column_stack((test_ids, predictions))
-        np.savetxt("Test2.txt", to_save, delimiter=",", header="Id,Lat,Lon", fmt='%1.3f')
+        np.savetxt("Test2.txt", to_save, delimiter=",", header="Id,Lat,Lon", fmt=['%i', '%1.3f', '%1.3f'])
     # """
     end_time = datetime.datetime.now()
     print("End time: ", end_time)
