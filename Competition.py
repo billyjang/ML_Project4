@@ -387,6 +387,8 @@ if __name__ == "__main__":
         lon_preds_nofriends = clf.predict(scaled_X_te_nofriends)
         print("Longitude No Friends best regressor: ")
         print(clf.cv_results_)
+
+
     else:
         clf.fit(scaled_X_tr_c_friends, y_tr_lat_friends)
         lat_preds_friends = clf.predict(scaled_X_te_friends)
